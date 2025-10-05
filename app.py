@@ -16,7 +16,7 @@ ASSETS = Path(__file__).parent / "assets"
 _icon = ASSETS / "IBEOlogo.png"
 page_icon = str(_icon) if _icon.is_file() else None
 
-# MUST be the first Streamlit command (and only once)
+# MUST be first Streamlit command (only once)
 st.set_page_config(
     page_title="IBEO — Tebi → Twinfield & Exact",
     page_icon=page_icon,
@@ -76,9 +76,7 @@ def require_google_login():
         hd = payload.get("hd")
         email_verified = payload.get("email_verified", False)
 
-        # Enforce @ibeo.nl via token claims (prefer hd, fallback to email suffix)
         domain_ok = (hd == "ibeo.nl") or (isinstance(email, str) and email.split("@")[-1].lower() == "ibeo.nl")
-
         if not email_verified or not domain_ok:
             st.error("Access restricted to verified @ibeo.nl Google Workspace accounts.")
             st.stop()
@@ -150,7 +148,6 @@ def format_date_for_filename(d):
         return str(d)
 
 def build_filename(admin_code, df):
-    # Ensure dates
     if "Date" in df.columns:
         dates = pd.to_datetime(df["Date"], errors="coerce").dropna()
         if not dates.empty:
@@ -187,9 +184,10 @@ if st.session_state.step == 1:
 
     lc1, lc2, lc3 = st.columns([1,1,2])
     with lc1:
-        safe_image(["Twinfield_logo.png", "twinfield logo.png", "Twinfield.png"], height=42)
+        # NOTE: Streamlit's st.image doesn't accept height=..., so we use width=...
+        safe_image(["Twinfield_logo.png", "twinfield logo.png", "Twinfield.png"], width=120)
     with lc2:
-        safe_image(["Exact_logo_red.png", "Exact logo.png", "Exact.png"], height=42)
+        safe_image(["Exact_logo_red.png", "Exact logo.png", "Exact.png"], width=120)
 
     st.session_state.target = st.radio(
         "Choose:",
@@ -243,13 +241,11 @@ elif st.session_state.step == 4:
     st.header("Step 4 — Run")
     df = st.session_state.df.copy()
 
-    # If KPL is required but empty, stop here nicely
     if st.session_state.use_kpl and (not st.session_state.kpl_code.strip()):
         st.error("This admin uses a Cost center, but no KPL code was provided in Step 3.")
         st.button("← Back to Step 3", on_click=prev_step)
         st.stop()
 
-    # Find rows missing 'Account Mapped'
     if "Account Mapped" in df.columns:
         need = df["Account Mapped"].isna() | (df["Account Mapped"].astype(str).str.strip() == "")
     else:
@@ -263,7 +259,6 @@ elif st.session_state.step == 4:
         st.warning(f"Missing GL mapping for {len(missing_accounts)} source accounts. Proceed to Step 5 to map and rerun.")
         st.button("Go to Step 5 →", on_click=lambda: st.session_state.update(step=5), type="primary")
     else:
-        # Build Twinfield XML (concept)
         with st.spinner("Building Twinfield XML (concept)…"):
             root = build_twinfield_xml(
                 df,
@@ -277,12 +272,7 @@ elif st.session_state.step == 4:
             xml_bytes = xml_to_bytes(root)
         st.success("XML built. Download below.")
         file_name = build_filename(st.session_state.admin_code, df)
-        st.download_button(
-            "Download Twinfield XML",
-            data=xml_bytes,
-            file_name=file_name,
-            mime="application/xml",
-        )
+        st.download_button("Download Twinfield XML", data=xml_bytes, file_name=file_name, mime="application/xml")
     st.button("← Back", on_click=prev_step)
 
 # --- STEP 5 ---
@@ -294,42 +284,34 @@ elif st.session_state.step == 5:
     if not missing_accounts:
         st.info("No missing mappings detected. Go back to Step 4 to run.")
 
-    # Build editable mapping table
     map_rows = [{"Account": a, "Mapped GL": st.session_state.mapping_dict.get(a, "")} for a in missing_accounts]
     map_df = pd.DataFrame(map_rows)
 
     st.markdown("#### Add GL (dim1) for each missing source account")
     edited = st.data_editor(map_df, num_rows="dynamic", use_container_width=True, key="map_editor")
 
-    # ONE combined button: Save mappings + Apply + Re-check + (if all good) Build & Download
     if st.button("Save mappings & Build XML"):
-        # Save mappings from editor
         for _, r in edited.iterrows():
             acc = str(r.get("Account", "")).strip()
             gl = str(r.get("Mapped GL", "")).strip()
             if acc and gl:
                 st.session_state.mapping_dict[acc] = gl
 
-        # Apply mappings to data
         for acc, gl in st.session_state.mapping_dict.items():
             mask = df["Account"].astype(str) == acc
             need = df["Account Mapped"].isna() | (df["Account Mapped"].astype(str).str.strip() == "")
             df.loc[mask & need, "Account Mapped"] = gl
 
         st.session_state.df = df
-
-        # Re-check missing
         need_mask = df["Account Mapped"].isna() | (df["Account Mapped"].astype(str).str.strip() == "")
         st.session_state.missing_accounts = sorted(set(df.loc[need_mask, "Account"].astype(str)))
 
         if st.session_state.missing_accounts:
             st.warning(f"Still missing {len(st.session_state.missing_accounts)} mappings. Add the rest and click the button again.")
         else:
-            # KPL presence check
             if st.session_state.use_kpl and (not st.session_state.kpl_code.strip()):
                 st.error("This admin uses a Cost center, but no KPL code was provided in Step 3.")
             else:
-                # All good: build XML immediately
                 with st.spinner("Building Twinfield XML (concept)…"):
                     root = build_twinfield_xml(
                         df,
@@ -343,15 +325,10 @@ elif st.session_state.step == 5:
                     xml_bytes = xml_to_bytes(root)
                 st.success("XML built. Download below.")
                 file_name = build_filename(st.session_state.admin_code, df)
-                st.download_button(
-                    "Download Twinfield XML",
-                    data=xml_bytes,
-                    file_name=file_name,
-                    mime="application/xml",
-                )
+                st.download_button("Download Twinfield XML", data=xml_bytes, file_name=file_name, mime="application/xml")
     st.button("← Back", on_click=prev_step)
 
-# --- Footer (always shown) ---
+# --- Footer ---
 st.markdown(
     "<div style='text-align:center;opacity:0.75;padding-top:24px;'>"
     "Built by <b>IBEO</b> — hospitality accounting made friendly."
