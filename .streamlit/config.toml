@@ -1,0 +1,7 @@
+[theme]
+# IBEO palette (teal + warm peach accent)
+primaryColor = "#f5a270"            # buttons, sliders (warm peach)
+backgroundColor = "#ffffff"         # page background
+secondaryBackgroundColor = "#eef4f4" # panels/boxes (very light teal tint)
+textColor = "#274c4d"               # deep teal text
+font = "sans serif"
