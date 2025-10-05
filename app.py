@@ -20,8 +20,6 @@ st.set_page_config(
 )
 
 
-st.set_page_config(page_title="Tebi → Bookkeeping (Secure)", layout="wide")
-
 # -------------------------
 # Google OAuth login (@ibeo.nl only)
 # -------------------------
