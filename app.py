@@ -9,6 +9,16 @@ from google.auth.transport import requests as grequests
 from tebi_books_transformers.io_reader import load_file
 from tebi_books_transformers.transform_twinfield import build_twinfield_xml
 from tebi_books_transformers.export_xml import xml_to_bytes
+from pathlib import Path
+
+ASSETS = Path(__file__).parent / "assets"
+
+st.set_page_config(
+    page_title="IBEO — Tebi → Twinfield & Exact",
+    page_icon=str(ASSETS / "IBEOlogo.png"),
+    layout="wide",
+)
+
 
 st.set_page_config(page_title="Tebi → Bookkeeping (Secure)", layout="wide")
 
@@ -69,6 +79,21 @@ def require_google_login():
     st.stop()
 
 user = require_google_login()
+
+# === Branded header ===
+with st.container():
+    c1, c2, c3 = st.columns([1,3,1], vertical_alignment="center")
+    with c1:
+        st.image(str(ASSETS / "IBEOlogo.png"), width=150)
+    with c2:
+        st.markdown(
+            "<div style='padding-top:6px;'><h2 style='margin:0'>Tebi → Twinfield & Exact</h2>"
+            "<p style='margin:0;color:#274c4d;'>Built by IBEO — fast, consistent daily revenue imports</p></div>",
+            unsafe_allow_html=True,
+        )
+    with c3:
+        st.image(str(ASSETS / "Tebi_logo.png"), width=110)
+st.divider()
 
 with st.sidebar:
     st.markdown(f"**Signed in as:** {user.get('email','')}")
@@ -145,8 +170,22 @@ with st.sidebar:
 # --- STEP 1 ---
 if st.session_state.step == 1:
     st.header("Step 1 — Select accounting software")
-    st.session_state.target = st.radio("Choose:", ["Twinfield", "Exact (coming soon)"], index=0)
+
+    lc1, lc2, lc3 = st.columns([1,1,2])
+    with lc1:
+        st.image(str(ASSETS / "Twinfield_logo.png"), height=42)
+    with lc2:
+        st.image(str(ASSETS / "Exact_logo_red.png"), height=42)
+
+    st.session_state.target = st.radio(
+        "Choose:",
+        ["Twinfield", "Exact (coming soon)"],
+        index=0,
+        horizontal=True,
+    )
+
     st.button("Next →", on_click=next_step, type="primary")
+
 
 # --- STEP 2 ---
 elif st.session_state.step == 2:
@@ -297,5 +336,12 @@ elif st.session_state.step == 5:
                     file_name=file_name,
                     mime="application/xml",
                 )
+                st.markdown(
+    "<div style='text-align:center;opacity:0.75;padding-top:24px;'>"
+    "Built by <b>IBEO</b> — hospitality accounting made friendly."
+    "</div>",
+    unsafe_allow_html=True
+)
+
 
     st.button("← Back", on_click=prev_step)
