@@ -5,20 +5,36 @@ from datetime import datetime
 from streamlit_oauth import OAuth2Component
 from google.oauth2 import id_token
 from google.auth.transport import requests as grequests
+from pathlib import Path
 
 from tebi_books_transformers.io_reader import load_file
 from tebi_books_transformers.transform_twinfield import build_twinfield_xml
 from tebi_books_transformers.export_xml import xml_to_bytes
-from pathlib import Path
 
+# ---------- Assets & page config ----------
 ASSETS = Path(__file__).parent / "assets"
+_icon = ASSETS / "IBEOlogo.png"
+page_icon = str(_icon) if _icon.is_file() else None
 
+# MUST be the first Streamlit command (and only once)
 st.set_page_config(
     page_title="IBEO — Tebi → Twinfield & Exact",
-    page_icon=str(ASSETS / "IBEOlogo.png"),
+    page_icon=page_icon,
     layout="wide",
 )
 
+# Safe image helpers (won't crash if a file is missing)
+def _find_asset(*names: str):
+    for n in names:
+        p = ASSETS / n
+        if p.is_file():
+            return str(p)
+    return None
+
+def safe_image(names, **kwargs):
+    path = _find_asset(*names) if isinstance(names, (list, tuple)) else _find_asset(names)
+    if path:
+        st.image(path, **kwargs)
 
 # -------------------------
 # Google OAuth login (@ibeo.nl only)
@@ -82,7 +98,7 @@ user = require_google_login()
 with st.container():
     c1, c2, c3 = st.columns([1,3,1], vertical_alignment="center")
     with c1:
-        st.image(str(ASSETS / "IBEOlogo.png"), width=150)
+        safe_image(["IBEOlogo.png", "IBEO_logo.png", "ibeo_logo.png"], width=150)
     with c2:
         st.markdown(
             "<div style='padding-top:6px;'><h2 style='margin:0'>Tebi → Twinfield & Exact</h2>"
@@ -90,7 +106,7 @@ with st.container():
             unsafe_allow_html=True,
         )
     with c3:
-        st.image(str(ASSETS / "Tebi_logo.png"), width=110)
+        safe_image(["Tebi_logo.png", "Tebi logo.png", "tebi_logo.png"], width=110)
 st.divider()
 
 with st.sidebar:
@@ -171,9 +187,9 @@ if st.session_state.step == 1:
 
     lc1, lc2, lc3 = st.columns([1,1,2])
     with lc1:
-        st.image(str(ASSETS / "Twinfield_logo.png"), height=42)
+        safe_image(["Twinfield_logo.png", "twinfield logo.png", "Twinfield.png"], height=42)
     with lc2:
-        st.image(str(ASSETS / "Exact_logo_red.png"), height=42)
+        safe_image(["Exact_logo_red.png", "Exact logo.png", "Exact.png"], height=42)
 
     st.session_state.target = st.radio(
         "Choose:",
@@ -183,7 +199,6 @@ if st.session_state.step == 1:
     )
 
     st.button("Next →", on_click=next_step, type="primary")
-
 
 # --- STEP 2 ---
 elif st.session_state.step == 2:
@@ -334,12 +349,12 @@ elif st.session_state.step == 5:
                     file_name=file_name,
                     mime="application/xml",
                 )
-                st.markdown(
+    st.button("← Back", on_click=prev_step)
+
+# --- Footer (always shown) ---
+st.markdown(
     "<div style='text-align:center;opacity:0.75;padding-top:24px;'>"
     "Built by <b>IBEO</b> — hospitality accounting made friendly."
     "</div>",
     unsafe_allow_html=True
 )
-
-
-    st.button("← Back", on_click=prev_step)
