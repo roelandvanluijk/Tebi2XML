@@ -1,15 +1,19 @@
 import os, json
 import streamlit as st
 import pandas as pd
+import io
 from datetime import datetime
 from streamlit_oauth import OAuth2Component
 from google.oauth2 import id_token
 from google.auth.transport import requests as grequests
 from pathlib import Path
 
+
 from tebi_books_transformers.io_reader import load_file
 from tebi_books_transformers.transform_twinfield import build_twinfield_xml
 from tebi_books_transformers.export_xml import xml_to_bytes
+from tebi_api import make_client, fetch_bookkeeping_export
+
 
 # ---------- Assets & page config ----------
 ASSETS = Path(__file__).parent / "assets"
@@ -200,15 +204,44 @@ if st.session_state.step == 1:
 
 # --- STEP 2 ---
 elif st.session_state.step == 2:
-    st.header("Step 2 — Upload Tebi export (CSV/XLSX)")
-    up = st.file_uploader("Upload file", type=["csv", "xlsx", "xls"])
-    if up:
-        with st.spinner("Reading…"):
-            df, _missing = load_file(up)   # works for raw CSV or your macro XLSX
+    st.header("Step 2 — Get data")
+    source = st.radio("Source", ["Upload CSV/XLSX", "Fetch from Tebi API"], horizontal=True)
+
+    if source == "Upload CSV/XLSX":
+        up = st.file_uploader("Upload file", type=["csv", "xlsx", "xls"])
+        if up:
+            df, _missing = load_file(up)
             st.session_state.df = df
-        st.success("File loaded.")
-        st.markdown("#### Preview")
-        st.dataframe(st.session_state.df.head(50), use_container_width=True)
+            st.success("File loaded.")
+            st.dataframe(df.head(50), use_column_width=True, use_container_width=True)
+
+    else:
+        env = st.selectbox("Environment", ["live", "test"], index=0)
+        admin = st.text_input("Tebi Office/Admin", value=st.session_state.get("admin_code","DEMO1"))
+        c1, c2 = st.columns(2)
+        with c1:
+            dfrom = st.date_input("From", value=pd.to_datetime("today").date().replace(day=1))
+        with c2:
+            dto = st.date_input("To", value=pd.to_datetime("today").date())
+
+        if st.button("Fetch from Tebi"):
+            token = st.secrets.get("TEBI_API_TOKEN")
+            if not token:
+                st.error("Missing TEBI_API_TOKEN in Streamlit secrets.")
+            else:
+                try:
+                    client = make_client(token, env)
+                    raw = fetch_bookkeeping_export(client, dfrom.strftime("%Y-%m-%d"), dto.strftime("%Y-%m-%d"), admin)
+                    # If the endpoint returns CSV:
+                    df = pd.read_csv(io.BytesIO(raw), sep=None, engine="python")
+                    # If it returns JSON instead, swap the line above for:
+                    # import json; df = pd.json_normalize(json.loads(raw))
+                    st.session_state.df = df
+                    st.success("Fetched from Tebi API.")
+                    st.dataframe(df.head(50), use_container_width=True)
+                except Exception as e:
+                    st.error(f"API error: {e}")
+
     st.button("Next →", on_click=next_step, type="primary", disabled=st.session_state.df is None)
 
 # --- STEP 3 ---
