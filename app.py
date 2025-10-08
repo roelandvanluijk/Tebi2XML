@@ -40,6 +40,56 @@ def safe_image(names, **kwargs):
     if path:
         st.image(path, **kwargs)
 
+def show_landing():
+    # Top brand strip
+    with st.container():
+        c1, c2, c3 = st.columns([1,3,1])
+        with c1:
+            safe_image(["IBEOlogo.png", "IBEO_logo.png", "ibeo_logo.png"], width=140)
+        with c2:
+            st.markdown(
+                "<div style='padding-top:6px;'><h1 style='margin:0'>Tebi → Twinfield & Exact</h1>"
+                "<p style='margin:0;color:#274c4d;'>Convert daily revenue exports into clean, importable journals</p></div>",
+                unsafe_allow_html=True,
+            )
+        with c3:
+            safe_image(["Tebi_logo.png", "Tebi logo.png", "tebi_logo.png"], width=110)
+    st.divider()
+
+    # What this app does
+    st.subheader("What this app does")
+    st.markdown("""
+    - **Imports Tebi exports** (CSV/XLSX or via **Tebi API**)  
+    - **Maps accounts & VAT**, fixes rounding differences  
+    - **Builds Twinfield XML** (posted as **concept**) — Exact (KAS) coming soon
+    """)
+
+    # Why login
+    st.subheader("Why login?")
+    st.markdown("""
+    - Only **IBEO** colleagues should access these tools  
+    - We require **Google sign-in with @ibeo.nl** to keep data secure
+    """)
+
+    # Data & privacy
+    with st.expander("About your data & privacy", expanded=False):
+        st.markdown("""
+        - Files are processed **in memory** and not stored on the server  
+        - API tokens are kept in **Streamlit Secrets** (server-side)  
+        - Output files are generated per session and offered for **download**
+        """)
+
+    # Quick how-to
+    st.subheader("How it works")
+    st.markdown("""
+    1. Log in with **@ibeo.nl**  
+    2. Choose your accounting software  
+    3. Upload a Tebi export **or** fetch via Tebi API  
+    4. Fill in admin details (journal, KPL, etc.)  
+    5. Build the file and import in Twinfield / (soon) Exact
+    """)
+
+
 # -------------------------
 # Google OAuth login (@ibeo.nl only)
 # -------------------------
@@ -52,14 +102,18 @@ REDIRECT_URI = st.secrets.get("REDIRECT_URI", "http://localhost:8501")
 oauth2 = OAuth2Component(CLIENT_ID, CLIENT_SECRET, AUTHORIZE_ENDPOINT, TOKEN_ENDPOINT, TOKEN_ENDPOINT)
 
 def require_google_login():
+    # If already logged in, return user info
     if "user" in st.session_state:
         return st.session_state["user"]
 
+    # If OAuth not configured, show a clear error
     if not CLIENT_ID or not CLIENT_SECRET:
         st.error("Google OAuth is not configured. Set GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET in .streamlit/secrets.toml")
         st.stop()
 
-    st.title("🔐 Sign in with Google")
+    # PUBLIC landing (info) + Sign-in button
+    show_landing()
+    st.markdown("### Continue")
     result = oauth2.authorize_button(
         name="Sign in with Google",
         icon="https://www.google.com/favicon.ico",
@@ -92,7 +146,9 @@ def require_google_login():
         }
         st.rerun()
 
+    # Don’t render the private app until logged in
     st.stop()
+
 
 user = require_google_login()
 
