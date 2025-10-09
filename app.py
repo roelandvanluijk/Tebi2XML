@@ -261,7 +261,7 @@ if st.session_state.step == 1:
 # --- STEP 2 ---
 elif st.session_state.step == 2:
     st.header("Step 2 — Get data")
-    source = st.radio("Source", ["Upload CSV/XLSX", "Fetch from Tebi API"], horizontal=True)
+    source = st.radio("Source", ["Upload CSV/XLSX", "Fetch from Tebi API [work in progress please use upload]"], horizontal=True)
 
     if source == "Upload CSV/XLSX":
         up = st.file_uploader("Upload file", type=["csv", "xlsx", "xls"])
@@ -269,7 +269,8 @@ elif st.session_state.step == 2:
             df, _missing = load_file(up)
             st.session_state.df = df
             st.success("File loaded.")
-            st.dataframe(df.head(50), use_column_width=True, use_container_width=True)
+            # FIX: remove deprecated use_column_width
+            st.dataframe(df.head(50), use_container_width=True)
 
     else:
         env = st.selectbox("Environment", ["live", "test"], index=0)
