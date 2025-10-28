@@ -2,6 +2,7 @@ import os, json
 import streamlit as st
 import pandas as pd
 import io
+import io, os
 from datetime import datetime
 from streamlit_oauth import OAuth2Component
 from google.oauth2 import id_token
@@ -261,38 +262,86 @@ if st.session_state.step == 1:
 # --- STEP 2 ---
 elif st.session_state.step == 2:
     st.header("Step 2 — Get data")
-    source = st.radio("Source", ["Upload CSV/XLSX", "Fetch from Tebi API [work in progress please use upload]"], horizontal=True)
+    source = st.radio("Source", ["Upload CSV/XLSX", "Fetch from Tebi API [work in progress; please use upload]"], horizontal=True, index=1)
 
-    if source == "Upload CSV/XLSX":
+    if source.startswith("Upload"):
         up = st.file_uploader("Upload file", type=["csv", "xlsx", "xls"])
         if up:
             df, _missing = load_file(up)
             st.session_state.df = df
             st.success("File loaded.")
-            # FIX: remove deprecated use_column_width
             st.dataframe(df.head(50), use_container_width=True)
 
     else:
         env = st.selectbox("Environment", ["live", "test"], index=0)
-        admin = st.text_input("Tebi Office/Admin", value=st.session_state.get("admin_code","DEMO1"))
-        c1, c2 = st.columns(2)
-        with c1:
-            dfrom = st.date_input("From", value=pd.to_datetime("today").date().replace(day=1))
-        with c2:
-            dto = st.date_input("To", value=pd.to_datetime("today").date())
+        token = st.secrets.get("TEBI_API_TOKEN")
+        if not token:
+            st.error("Missing TEBI_API_TOKEN in Streamlit secrets.")
+        else:
+            client = make_client(token, env)
 
-        if st.button("Fetch from Tebi"):
-            token = st.secrets.get("TEBI_API_TOKEN")
-            if not token:
-                st.error("Missing TEBI_API_TOKEN in Streamlit secrets.")
+            # --- Accounts picker (API + fallback) ---
+            if "tebi_accounts" not in st.session_state:
+                st.session_state.tebi_accounts = []
+
+            cA, cB = st.columns([1,1])
+            with cA:
+                if st.button("Load accounts (from Tebi)"):
+                    st.session_state.tebi_accounts = []
+                    try:
+                        st.session_state.tebi_accounts = list_accounts(client)
+                        if not st.session_state.tebi_accounts:
+                            st.info("No accounts returned by API. Using fallback from secrets (if present).")
+                    except Exception as e:
+                        st.warning(f"Could not fetch accounts from API: {e}")
+
+            # Fallback: allow defining accounts in secrets as a simple mapping
+            # Example in secrets.toml:
+            # [TEBI_ACCOUNTS]
+            # "447213" = "IBEO Demo Office"
+            fallback_accounts = []
+            if "TEBI_ACCOUNTS" in st.secrets:
+                for k, v in st.secrets["TEBI_ACCOUNTS"].items():
+                    fallback_accounts.append({"id": str(k), "name": str(v)})
+
+            accounts = st.session_state.tebi_accounts or fallback_accounts
+
+            if accounts:
+                opts = {f'{a["name"]} ({a["id"]})': a["id"] for a in accounts}
+                label = st.selectbox("Choose account/office", list(opts.keys()))
+                admin = opts[label]
             else:
+                admin = st.text_input("Tebi Office/Admin", value=st.session_state.get("admin_code", "DEMO1"))
+
+            c1, c2 = st.columns(2)
+            with c1:
+                dfrom = st.date_input("From", value=pd.to_datetime("today").date().replace(day=1))
+            with c2:
+                dto = st.date_input("To", value=pd.to_datetime("today").date())
+
+            # Optional: allow overriding the path via UI (handy while we confirm)
+            path_override = st.text_input(
+                "API path (override)",
+                value=os.environ.get("TEBI_BOOKKEEPING_PATH", ""),
+                help="Leave blank to use TEBI_BOOKKEEPING_PATH secret or the default placeholder."
+            ) or None
+
+            if st.button("Fetch from Tebi"):
                 try:
-                    client = make_client(token, env)
-                    raw = fetch_bookkeeping_export(client, dfrom.strftime("%Y-%m-%d"), dto.strftime("%Y-%m-%d"), admin)
-                    # If the endpoint returns CSV:
-                    df = pd.read_csv(io.BytesIO(raw), sep=None, engine="python")
-                    # If it returns JSON instead, swap the line above for:
-                    # import json; df = pd.json_normalize(json.loads(raw))
+                    raw = fetch_bookkeeping_export(
+                        client,
+                        dfrom.strftime("%Y-%m-%d"),
+                        dto.strftime("%Y-%m-%d"),
+                        admin,
+                        path_override=path_override
+                    )
+                    # If CSV:
+                    try:
+                        df = pd.read_csv(io.BytesIO(raw))
+                    except Exception:
+                        # If JSON:
+                        import json
+                        df = pd.json_normalize(json.loads(raw))
                     st.session_state.df = df
                     st.success("Fetched from Tebi API.")
                     st.dataframe(df.head(50), use_container_width=True)
@@ -300,6 +349,7 @@ elif st.session_state.step == 2:
                     st.error(f"API error: {e}")
 
     st.button("Next →", on_click=next_step, type="primary", disabled=st.session_state.df is None)
+
 
 # --- STEP 3 ---
 elif st.session_state.step == 3:
