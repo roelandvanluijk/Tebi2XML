@@ -22,25 +22,21 @@ args = "streamlit-app"
 name = "streamlit-app"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "streamlit run app.py"
-waitForPort = 5000
-
 [workflows.workflow.metadata]
 outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "streamlit run app.py --server.port 5000 --server.address 0.0.0.0"
+waitForPort = 5000
 
 [[ports]]
 localPort = 5000
 externalPort = 80
 
 [[ports]]
-localPort = 8501
+localPort = 34287
 externalPort = 3000
-
-[[ports]]
-localPort = 42119
-externalPort = 3001
 
 [deployment]
 deploymentTarget = "autoscale"

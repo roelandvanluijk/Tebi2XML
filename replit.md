@@ -101,3 +101,4 @@ assets/                     # Logo images
 - OAuth secrets must be configured before first use
 - The app requires valid Google credentials to access
 - XML files are posted as "concept" in Twinfield for review before finalizing
+- **Deployment**: Config works for both Streamlit Cloud (default port) and Replit (port set via workflow)
