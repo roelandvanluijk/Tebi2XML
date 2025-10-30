@@ -4,7 +4,7 @@
 A Streamlit web application that transforms Tebi exports into Twinfield XML format (posted as concept). Features Google Workspace login restricted to @ibeo.nl domain.
 
 ## Purpose
-- Import Tebi exports (CSV/XLSX or via Tebi API)
+- Import Tebi exports (CSV/XLSX files)
 - Map accounts & VAT codes
 - Fix rounding differences
 - Generate Twinfield XML files for import (posted as concept)
@@ -22,6 +22,7 @@ A Streamlit web application that transforms Tebi exports into Twinfield XML form
 - Set up workflow for Streamlit app
 - Configured deployment settings (autoscale)
 - Created .gitignore for Python project
+- Removed Tebi API functionality (no open API available from Tebi)
 
 ## Project Architecture
 
@@ -66,17 +67,11 @@ assets/                     # Logo images
    REDIRECT_URI = "https://your-repl-name.repl.co"
    ```
 
-### Optional: Tebi API Setup
-Add to `.streamlit/secrets.toml`:
-```toml
-TEBI_API_TOKEN = "your-tebi-api-token"
-TEBI_BOOKKEEPING_PATH = "/api/external/bookkeeping/export"
-```
 
 ## Usage Flow
 1. Sign in with Google (@ibeo.nl only)
 2. Select accounting software (Twinfield)
-3. Upload Tebi CSV/XLSX or fetch via Tebi API
+3. Upload Tebi CSV/XLSX file
 4. Fill in admin details (admin code, journal, KPL, etc.)
 5. Run checks and map missing GL codes
 6. Download Twinfield XML file

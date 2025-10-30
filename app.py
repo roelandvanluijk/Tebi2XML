@@ -1,8 +1,8 @@
-import os, json
+import os
+import json
+import io
 import streamlit as st
 import pandas as pd
-import io
-import io, os
 from datetime import datetime
 from streamlit_oauth import OAuth2Component
 from google.oauth2 import id_token
@@ -13,7 +13,6 @@ from pathlib import Path
 from tebi_books_transformers.io_reader import load_file
 from tebi_books_transformers.transform_twinfield import build_twinfield_xml
 from tebi_books_transformers.export_xml import xml_to_bytes
-from tebi_api import make_client, fetch_bookkeeping_export, list_accounts
 
 # ---------- Assets & page config ----------
 ASSETS = Path(__file__).parent / "assets"
@@ -59,7 +58,7 @@ def show_landing():
     # What this app does
     st.subheader("What this app does")
     st.markdown("""
-    - **Imports Tebi exports** (CSV/XLSX or via **Tebi API**)  
+    - **Imports Tebi exports** (CSV/XLSX files)  
     - **Maps accounts & VAT**, fixes rounding differences  
     - **Builds Twinfield XML** (posted as **concept**) — Exact (KAS) coming soon
     """)
@@ -84,7 +83,7 @@ def show_landing():
     st.markdown("""
     1. Log in with **@ibeo.nl**  
     2. Choose your accounting software  
-    3. Upload a Tebi export **or** fetch via Tebi API  
+    3. Upload a Tebi export (CSV or XLSX)  
     4. Fill in admin details (journal, KPL, etc.)  
     5. Build the file and import in Twinfield / (soon) Exact
     """)
@@ -178,6 +177,7 @@ with st.sidebar:
 # -------------------------
 defaults = {
     "step": 1,
+    "prev_step_num": 1,
     "df": None,
     "missing_accounts": [],
     "mapping_dict": {},       # {source Account -> mapped GL}
@@ -194,9 +194,11 @@ for k, v in defaults.items():
         st.session_state[k] = v
 
 def next_step():
+    st.session_state.prev_step_num = st.session_state.step
     st.session_state.step += 1
 
 def prev_step():
+    st.session_state.prev_step_num = st.session_state.step
     st.session_state.step = max(1, st.session_state.step - 1)
 
 def format_date_for_filename(d):
@@ -260,92 +262,27 @@ if st.session_state.step == 1:
 
 # --- STEP 2 ---
 elif st.session_state.step == 2:
-    st.header("Step 2 — Get data")
-    source = st.radio("Source", ["Upload CSV/XLSX", "Fetch from Tebi API [work in progress; please use upload]"], horizontal=True, index=1)
-
-    if source.startswith("Upload"):
-        up = st.file_uploader("Upload file", type=["csv", "xlsx", "xls"])
-        if up:
-            df, _missing = load_file(up)
-            st.session_state.df = df
-            st.success("File loaded.")
-            st.dataframe(df.head(50), use_container_width=True)
-
-    else:
-        env = st.selectbox("Environment", ["live", "test"], index=0)
-        token = st.secrets.get("TEBI_API_TOKEN")
-        if not token:
-            st.error("Missing TEBI_API_TOKEN in Streamlit secrets.")
-        else:
-            client = make_client(token, env)
-
-            # --- Accounts picker (API + fallback) ---
-            if "tebi_accounts" not in st.session_state:
-                st.session_state.tebi_accounts = []
-
-            cA, cB = st.columns([1,1])
-            with cA:
-                if st.button("Load accounts (from Tebi)"):
-                    st.session_state.tebi_accounts = []
-                    try:
-                        st.session_state.tebi_accounts = list_accounts(client)
-                        if not st.session_state.tebi_accounts:
-                            st.info("No accounts returned by API. Using fallback from secrets (if present).")
-                    except Exception as e:
-                        st.warning(f"Could not fetch accounts from API: {e}")
-
-            # Fallback: allow defining accounts in secrets as a simple mapping
-            # Example in secrets.toml:
-            # [TEBI_ACCOUNTS]
-            # "447213" = "IBEO Demo Office"
-            fallback_accounts = []
-            if "TEBI_ACCOUNTS" in st.secrets:
-                for k, v in st.secrets["TEBI_ACCOUNTS"].items():
-                    fallback_accounts.append({"id": str(k), "name": str(v)})
-
-            accounts = st.session_state.tebi_accounts or fallback_accounts
-
-            if accounts:
-                opts = {f'{a["name"]} ({a["id"]})': a["id"] for a in accounts}
-                label = st.selectbox("Choose account/office", list(opts.keys()))
-                admin = opts[label]
-            else:
-                admin = st.text_input("Tebi Office/Admin", value=st.session_state.get("admin_code", "DEMO1"))
-
-            c1, c2 = st.columns(2)
-            with c1:
-                dfrom = st.date_input("From", value=pd.to_datetime("today").date().replace(day=1))
-            with c2:
-                dto = st.date_input("To", value=pd.to_datetime("today").date())
-
-            # Optional: allow overriding the path via UI (handy while we confirm)
-            path_override = st.text_input(
-                "API path (override)",
-                value=os.environ.get("TEBI_BOOKKEEPING_PATH", ""),
-                help="Leave blank to use TEBI_BOOKKEEPING_PATH secret or the default placeholder."
-            ) or None
-
-            if st.button("Fetch from Tebi"):
-                try:
-                    raw = fetch_bookkeeping_export(
-                        client,
-                        dfrom.strftime("%Y-%m-%d"),
-                        dto.strftime("%Y-%m-%d"),
-                        admin,
-                        path_override=path_override
-                    )
-                    # If CSV:
-                    try:
-                        df = pd.read_csv(io.BytesIO(raw))
-                    except Exception:
-                        # If JSON:
-                        import json
-                        df = pd.json_normalize(json.loads(raw))
-                    st.session_state.df = df
-                    st.success("Fetched from Tebi API.")
-                    st.dataframe(df.head(50), use_container_width=True)
-                except Exception as e:
-                    st.error(f"API error: {e}")
+    if st.session_state.prev_step_num > 2:
+        st.session_state.df = None
+        st.session_state.missing_accounts = []
+        st.session_state.mapping_dict = {}
+        st.session_state.prev_step_num = 2
+    
+    st.header("Step 2 — Upload data")
+    st.markdown("Upload your Tebi export file (CSV or XLSX format)")
+    
+    if st.session_state.df is not None:
+        st.info("✓ File already loaded. Upload a new file to replace it, or click 'Clear' to start fresh.")
+        if st.button("Clear uploaded file"):
+            st.session_state.df = None
+            st.rerun()
+    
+    up = st.file_uploader("Upload file", type=["csv", "xlsx", "xls"], key="file_upload_step2")
+    if up:
+        df, _missing = load_file(up)
+        st.session_state.df = df
+        st.success("File loaded.")
+        st.dataframe(df.head(50), use_container_width=True)
 
     st.button("Next →", on_click=next_step, type="primary", disabled=st.session_state.df is None)
 
