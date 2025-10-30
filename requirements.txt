@@ -9,3 +9,4 @@ openpyxl
 pandas
 streamlit
 streamlit-oauth
+xlrd
