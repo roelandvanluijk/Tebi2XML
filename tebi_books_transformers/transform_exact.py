@@ -4,58 +4,152 @@ from io import BytesIO
 from .utils import to_float
 
 def _gl(code):
+    """Clean GL code (no .0 suffixes)"""
     s = str(code).strip()
     try:
         return str(int(float(s)))
     except Exception:
         return s
 
-def build_exact_csv(df, admin_code, differences_ledger, currency="EUR", cost_center_code=None):
+def build_exact_csv(df, admin_code, journal_code, differences_ledger, currency="EUR", cost_center_code=None, journal_type="KAS"):
     """
-    Minimal CSV scaffold for Exact import experiments.
-    NOTE: This is a placeholder schema. We'll align columns once you confirm the Exact import spec you use.
+    Build Exact Online import CSV in Dutch format for KAS (cash) or MEMORIAAL (general journal).
+    Based on official Exact Online templates for revenue import.
+    
+    Args:
+        df: DataFrame with Tebi data
+        admin_code: Exact administration code
+        journal_code: Dagboek code (e.g., "10" for KAS)
+        differences_ledger: GL account for rounding differences
+        currency: Currency code (default EUR)
+        cost_center_code: Optional cost center (Kostenplaats) code
+        journal_type: "KAS" or "MEMORIAAL"
     """
-    # Ensure numeric
+    # Ensure numeric columns exist
     if "Amount_num" not in df.columns and "Amount" in df.columns:
         df["Amount_num"] = df["Amount"].apply(to_float)
     if "TaxAmount_num" not in df.columns and "Tax Amount" in df.columns:
         df["TaxAmount_num"] = df["Tax Amount"].apply(to_float)
 
-    df["Date"] = pd.to_datetime(df["Date"], errors="coerce").dt.date
-    out_rows = []
-
-    for _, r in df.iterrows():
-        gl = _gl(r.get("Account Mapped", ""))
-        if not gl or gl.lower() == "nan":
-            continue
-
-        net = r.get("Amount_num")
-        if pd.isna(net) or float(net) == 0:
-            continue
-
-        # Exact journal-style rows (very generic for now)
-        amount = abs(float(net))
-        debit = amount if net < 0 else 0.0   # payments/AR negative -> debit
-        credit = amount if net > 0 else 0.0  # revenue positive -> credit
-
-        out_rows.append({
-            "Date": pd.to_datetime(r["Date"]).strftime("%Y-%m-%d") if pd.notna(r["Date"]) else "",
-            "GLAccount": gl,
-            "Description": str(r.get("Account", ""))[:60],
-            "Debit": f"{debit:.2f}",
-            "Credit": f"{credit:.2f}",
-            "VATCode": (str(r.get("Tax Code Mapped", "")).strip() or ""),
-            "VATAmount": ("" if pd.isna(r.get("TaxAmount_num")) else f"{abs(float(r.get('TaxAmount_num'))):.2f}"),
-            "CostCenter": (str(cost_center_code).strip() if cost_center_code else ""),
-            "Currency": currency,
-            "Admin": admin_code,
-        })
-
-    # Write CSV bytes
-    out_df = pd.DataFrame(out_rows, columns=[
-        "Date","GLAccount","Description","Debit","Credit",
-        "VATCode","VATAmount","CostCenter","Currency","Admin"
+    df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+    
+    # Dutch column names matching Exact Online templates
+    dutch_columns = [
+        "Dagboek: Code",          # Journal code
+        "Boekjaar",               # Fiscal year
+        "Periode",                # Period
+        "Boekstuknummer",         # Document number
+        "Valuta",                 # Currency
+    ]
+    
+    if journal_type == "KAS":
+        dutch_columns.append("Beginsaldo")  # Opening balance (KAS only)
+        dutch_columns.append("Datum")       # Date
+    else:
+        dutch_columns.append("Wisselkoers")  # Exchange rate (MEMORIAAL)
+        dutch_columns.append("Boekdatum")    # Booking date
+    
+    dutch_columns.extend([
+        "Grootboekrekening",      # GL account
+        "Omschrijving",           # Description
+        "Onze ref.",              # Our reference
+        "Bedrag",                 # Amount
+        "Aantal",                 # Quantity
+        "BTW-code",               # VAT code
+        "BTW-percentage",         # VAT percentage
+        "BTW-bedrag",             # VAT amount
+        "Opmerkingen",            # Notes
+        "Project",                # Project
+        "Kostenplaats: Code",     # Cost center code
+        "Kostenplaats: Omschrijving",  # Cost center description
+        "Kostendrager: Code",     # Cost unit code
+        "Kostendrager: Omschrijving",  # Cost unit description
+        "Code",                   # Account code (relation)
+        "Naam"                    # Account name (relation)
     ])
+    
+    if journal_type != "KAS":
+        # MEMORIAAL needs exchange rate at this position instead of opening balance
+        dutch_columns.insert(5, "Wisselkoers")
+        dutch_columns.remove("Wisselkoers")  # Remove duplicate
+
+    out_rows = []
+    
+    # Group by date to create document numbers
+    for date_val, group in df.groupby(df["Date"].dt.date):
+        if pd.isna(date_val):
+            continue
+            
+        # Generate document number from date
+        date_obj = pd.to_datetime(date_val)
+        fiscal_year = date_obj.year
+        period = date_obj.month
+        doc_number = date_obj.strftime("%y%m%d01")  # Format: YYMMDD01
+        
+        # Calculate opening balance for KAS (sum of all amounts for the day)
+        opening_balance = 0.0
+        if journal_type == "KAS":
+            opening_balance = 0.0  # Typically 0, could be calculated if needed
+
+        for _, r in group.iterrows():
+            gl = _gl(r.get("Account Mapped", ""))
+            if not gl or gl.lower() == "nan":
+                continue
+
+            amount = r.get("Amount_num")
+            if pd.isna(amount) or float(amount) == 0:
+                continue
+
+            # Get VAT info
+            vat_code = str(r.get("Tax Code Mapped", "")).strip() if pd.notna(r.get("Tax Code Mapped")) else ""
+            vat_amount = r.get("TaxAmount_num")
+            vat_amount_str = f"{abs(float(vat_amount)):.2f}" if pd.notna(vat_amount) and vat_amount != 0 else ""
+            vat_percentage = ""  # Exact Online calculates this from VAT code
+            
+            # Description from Account column
+            description = str(r.get("Account", ""))[:60] if pd.notna(r.get("Account")) else ""
+            
+            # Build row according to Dutch template
+            row = {
+                "Dagboek: Code": str(journal_code),
+                "Boekjaar": str(fiscal_year),
+                "Periode": str(period),
+                "Boekstuknummer": doc_number,
+                "Valuta": currency,
+            }
+            
+            if journal_type == "KAS":
+                row["Beginsaldo"] = f"{opening_balance:.2f}" if opening_balance != 0 else ""
+                row["Datum"] = date_obj.strftime("%d-%m-%Y")  # Excel date serial for Dutch format
+            else:
+                row["Wisselkoers"] = ""  # Empty for base currency
+                row["Boekdatum"] = date_obj.strftime("%d-%m-%Y")
+            
+            row.update({
+                "Grootboekrekening": gl,
+                "Omschrijving": description,
+                "Onze ref.": doc_number,
+                "Bedrag": f"{float(amount):.2f}",
+                "Aantal": "",
+                "BTW-code": vat_code,
+                "BTW-percentage": vat_percentage,
+                "BTW-bedrag": vat_amount_str,
+                "Opmerkingen": "",
+                "Project": "",
+                "Kostenplaats: Code": str(cost_center_code) if cost_center_code else "",
+                "Kostenplaats: Omschrijving": "",
+                "Kostendrager: Code": "",
+                "Kostendrager: Omschrijving": "",
+                "Code": "",  # Relation code (optional)
+                "Naam": ""   # Relation name (optional)
+            })
+            
+            out_rows.append(row)
+
+    # Create DataFrame with proper column order
+    out_df = pd.DataFrame(out_rows, columns=dutch_columns)
+    
+    # Write to CSV
     mem = BytesIO()
     out_df.to_csv(mem, index=False, encoding="utf-8")
     mem.seek(0)

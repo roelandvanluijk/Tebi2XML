@@ -12,6 +12,7 @@ from pathlib import Path
 
 from tebi_books_transformers.io_reader import load_file
 from tebi_books_transformers.transform_twinfield import build_twinfield_xml
+from tebi_books_transformers.transform_exact import build_exact_csv
 from tebi_books_transformers.export_xml import xml_to_bytes
 
 # ---------- Assets & page config ----------
@@ -209,7 +210,7 @@ def format_date_for_filename(d):
     except Exception:
         return str(d)
 
-def build_filename(admin_code, df):
+def build_filename(admin_code, df, target="Twinfield"):
     if "Date" in df.columns:
         dates = pd.to_datetime(df["Date"], errors="coerce").dropna()
         if not dates.empty:
@@ -219,7 +220,9 @@ def build_filename(admin_code, df):
             start = end = "unknown"
     else:
         start = end = "unknown"
-    return f"Tebi import {admin_code} {start} - {end}.xml"
+    
+    ext = ".xml" if target == "Twinfield" else ".csv"
+    return f"Tebi import {admin_code} {start} - {end}{ext}"
 
 st.title("Tebi → Bookkeeping — Step-by-step")
 st.caption("Select → Upload → Fill info → Run → Map missing GL → Rerun (Twinfield XML posts as concept).")
@@ -253,7 +256,7 @@ if st.session_state.step == 1:
 
     st.session_state.target = st.radio(
         "Choose:",
-        ["Twinfield", "Exact (coming soon)"],
+        ["Twinfield", "Exact Online"],
         index=0,
         horizontal=True,
     )
@@ -290,23 +293,36 @@ elif st.session_state.step == 2:
 # --- STEP 3 ---
 elif st.session_state.step == 3:
     st.header("Step 3 — Fill in information")
+    
+    is_exact = (st.session_state.target == "Exact Online")
+    
+    # Common fields for both systems
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        st.session_state.admin_code = st.text_input("Twinfield Admin code", value=st.session_state.admin_code)
+        label = "Exact Admin code" if is_exact else "Twinfield Admin code"
+        st.session_state.admin_code = st.text_input(label, value=st.session_state.admin_code)
     with c2:
-        st.session_state.journal_code = st.text_input("Twinfield Journal code", value=st.session_state.journal_code)
+        label = "Dagboek code (KAS)" if is_exact else "Twinfield Journal code"
+        help_text = "Journal code for KAS (cash journal), e.g., '10'" if is_exact else None
+        st.session_state.journal_code = st.text_input(label, value=st.session_state.journal_code, help=help_text)
     with c3:
         st.session_state.diff_ledger = st.text_input("Differences ledger (GL)", value=st.session_state.diff_ledger)
     with c4:
         st.session_state.currency = st.text_input("Currency", value=st.session_state.currency)
 
-    st.checkbox("I confirm a TEBI Journal exists in Twinfield", value=True)
+    # Software-specific confirmation
+    if is_exact:
+        st.checkbox("I confirm a KAS Journal exists in Exact Online", value=True)
+    else:
+        st.checkbox("I confirm a TEBI Journal exists in Twinfield", value=True)
 
-    st.markdown("#### Cost center (KPL)")
+    # Cost center (KPL) - common for both
+    st.markdown("#### Cost center (KPL / Kostenplaats)")
     use_kpl_choice = st.radio("Does this administration use a Cost center (KPL)?", ["No", "Yes"], index=0 if not st.session_state.use_kpl else 1)
     st.session_state.use_kpl = (use_kpl_choice == "Yes")
     if st.session_state.use_kpl:
-        st.session_state.kpl_code = st.text_input("Cost center (KPL) code", value=st.session_state.kpl_code, help="This will be written to <dim2> in Twinfield.")
+        help_text = "Kostenplaats code for Exact Online" if is_exact else "This will be written to <dim2> in Twinfield."
+        st.session_state.kpl_code = st.text_input("Cost center (KPL) code", value=st.session_state.kpl_code, help=help_text)
         if not st.session_state.kpl_code.strip():
             st.info("Please enter the KPL code. Leave blank only if this admin should not use a cost center.")
 
@@ -316,6 +332,7 @@ elif st.session_state.step == 3:
 elif st.session_state.step == 4:
     st.header("Step 4 — Run")
     df = st.session_state.df.copy()
+    is_exact = (st.session_state.target == "Exact Online")
 
     if st.session_state.use_kpl and (not st.session_state.kpl_code.strip()):
         st.error("This admin uses a Cost center, but no KPL code was provided in Step 3.")
@@ -335,20 +352,36 @@ elif st.session_state.step == 4:
         st.warning(f"Missing GL mapping for {len(missing_accounts)} source accounts. Proceed to Step 5 to map and rerun.")
         st.button("Go to Step 5 →", on_click=lambda: st.session_state.update(step=5), type="primary")
     else:
-        with st.spinner("Building Twinfield XML (concept)…"):
-            root = build_twinfield_xml(
-                df,
-                st.session_state.admin_code,
-                st.session_state.journal_code,
-                st.session_state.diff_ledger,
-                currency=st.session_state.currency,
-                destiny="concept",
-                cost_center_code=(st.session_state.kpl_code.strip() if st.session_state.use_kpl else None),
-            )
-            xml_bytes = xml_to_bytes(root)
-        st.success("XML built. Download below.")
-        file_name = build_filename(st.session_state.admin_code, df)
-        st.download_button("Download Twinfield XML", data=xml_bytes, file_name=file_name, mime="application/xml")
+        # Generate file based on selected software
+        if is_exact:
+            with st.spinner("Building Exact Online CSV (KAS journal)…"):
+                csv_bytes = build_exact_csv(
+                    df,
+                    admin_code=st.session_state.admin_code,
+                    journal_code=st.session_state.journal_code,
+                    differences_ledger=st.session_state.diff_ledger,
+                    currency=st.session_state.currency,
+                    cost_center_code=(st.session_state.kpl_code.strip() if st.session_state.use_kpl else None),
+                    journal_type="KAS"
+                )
+            st.success("CSV built. Download below and import via Exact Online → Financieel → Import.")
+            file_name = build_filename(st.session_state.admin_code, df, target="Exact Online")
+            st.download_button("Download Exact CSV (KAS)", data=csv_bytes, file_name=file_name, mime="text/csv")
+        else:
+            with st.spinner("Building Twinfield XML (concept)…"):
+                root = build_twinfield_xml(
+                    df,
+                    st.session_state.admin_code,
+                    st.session_state.journal_code,
+                    st.session_state.diff_ledger,
+                    currency=st.session_state.currency,
+                    destiny="concept",
+                    cost_center_code=(st.session_state.kpl_code.strip() if st.session_state.use_kpl else None),
+                )
+                xml_bytes = xml_to_bytes(root)
+            st.success("XML built. Download below.")
+            file_name = build_filename(st.session_state.admin_code, df, target="Twinfield")
+            st.download_button("Download Twinfield XML", data=xml_bytes, file_name=file_name, mime="application/xml")
     st.button("← Back", on_click=prev_step)
 
 # --- STEP 5 ---
@@ -356,6 +389,8 @@ elif st.session_state.step == 5:
     st.header("Step 5 — Map missing ledgers & rerun")
     df = st.session_state.df.copy()
     missing_accounts = st.session_state.missing_accounts
+    is_exact = (st.session_state.target == "Exact Online")
+    button_label = "Save mappings & Build CSV" if is_exact else "Save mappings & Build XML"
 
     if not missing_accounts:
         st.info("No missing mappings detected. Go back to Step 4 to run.")
@@ -366,7 +401,7 @@ elif st.session_state.step == 5:
     st.markdown("#### Add GL (dim1) for each missing source account")
     edited = st.data_editor(map_df, num_rows="dynamic", use_container_width=True, key="map_editor")
 
-    if st.button("Save mappings & Build XML"):
+    if st.button(button_label):
         for _, r in edited.iterrows():
             acc = str(r.get("Account", "")).strip()
             gl = str(r.get("Mapped GL", "")).strip()
@@ -388,20 +423,36 @@ elif st.session_state.step == 5:
             if st.session_state.use_kpl and (not st.session_state.kpl_code.strip()):
                 st.error("This admin uses a Cost center, but no KPL code was provided in Step 3.")
             else:
-                with st.spinner("Building Twinfield XML (concept)…"):
-                    root = build_twinfield_xml(
-                        df,
-                        st.session_state.admin_code,
-                        st.session_state.journal_code,
-                        st.session_state.diff_ledger,
-                        currency=st.session_state.currency,
-                        destiny="concept",
-                        cost_center_code=(st.session_state.kpl_code.strip() if st.session_state.use_kpl else None),
-                    )
-                    xml_bytes = xml_to_bytes(root)
-                st.success("XML built. Download below.")
-                file_name = build_filename(st.session_state.admin_code, df)
-                st.download_button("Download Twinfield XML", data=xml_bytes, file_name=file_name, mime="application/xml")
+                # Generate file based on selected software
+                if is_exact:
+                    with st.spinner("Building Exact Online CSV (KAS journal)…"):
+                        csv_bytes = build_exact_csv(
+                            df,
+                            admin_code=st.session_state.admin_code,
+                            journal_code=st.session_state.journal_code,
+                            differences_ledger=st.session_state.diff_ledger,
+                            currency=st.session_state.currency,
+                            cost_center_code=(st.session_state.kpl_code.strip() if st.session_state.use_kpl else None),
+                            journal_type="KAS"
+                        )
+                    st.success("CSV built. Download below and import via Exact Online → Financieel → Import.")
+                    file_name = build_filename(st.session_state.admin_code, df, target="Exact Online")
+                    st.download_button("Download Exact CSV (KAS)", data=csv_bytes, file_name=file_name, mime="text/csv")
+                else:
+                    with st.spinner("Building Twinfield XML (concept)…"):
+                        root = build_twinfield_xml(
+                            df,
+                            st.session_state.admin_code,
+                            st.session_state.journal_code,
+                            st.session_state.diff_ledger,
+                            currency=st.session_state.currency,
+                            destiny="concept",
+                            cost_center_code=(st.session_state.kpl_code.strip() if st.session_state.use_kpl else None),
+                        )
+                        xml_bytes = xml_to_bytes(root)
+                    st.success("XML built. Download below.")
+                    file_name = build_filename(st.session_state.admin_code, df, target="Twinfield")
+                    st.download_button("Download Twinfield XML", data=xml_bytes, file_name=file_name, mime="application/xml")
     st.button("← Back", on_click=prev_step)
 
 # --- Footer ---
