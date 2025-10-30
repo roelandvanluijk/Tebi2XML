@@ -1,0 +1,164 @@
+[11:13:55] 🚀 Starting up repository: 'tebi2xml', branch: 'main', main module: 'app.py'
+
+[11:13:55] 🐙 Cloning repository...
+
+[11:13:56] 🐙 Cloning into '/mount/src/tebi2xml'...
+
+[11:13:57] 🐙 Cloned repository!
+
+[11:13:57] 🐙 Pulling code changes from Github...
+
+[11:13:58] 📦 Processing dependencies...
+
+
+──────────────────────────────────────── uv ───────────────────────────────────────────
+
+
+Using uv pip install.
+
+Using Python 3.12.12 environment at /home/adminuser/venv
+
+Resolved 55 packages in 395ms
+
+Prepared 55 packages in 1m 20s
+
+Installed 55 packages in 114ms
+
+ + altair==5.5.0
+
+ + anyio==4.11.0
+
+ + attrs==25.4.0
+
+ + blinker==1.9.0
+
+ + cachetools==5.5.2
+
+ + certifi==2025.10.5
+
+ + charset-normalizer==3.4.4
+
+ + click==8.3.0
+
+ + et-xmlfile==2.0.0
+
+ + gitdb==[2025-10-30 11:15:19.663581] 4.0.12
+
+ + gitpython==3.1.45
+
+ + google-auth==2.42.0
+
+ + h11==0.16.0
+
+ + httpcore==1.0.9
+
+ + httpx==0.28.1
+
+ + httpx-oauth==0.16.1
+
+ + idna[2025-10-30 11:15:19.663794] ==3.11
+
+ + jinja2==3.1.6
+
+ + jsonschema==4.25.1
+
+ + jsonschema-specifications==2025.9.1
+
+ + markdown-it-py==4.0.0
+
+ + markupsafe[2025-10-30 11:15:19.664030] ==3.0.3
+
+ + mdurl==0.1.2
+
+ + narwhals==2.10.0
+
+ + numpy==2.3.4
+
+ + openpyxl==3.1.5
+
+ +[2025-10-30 11:15:19.664288]  packaging==24.2
+
+ + pandas==2.2.3
+
+ + pillow==10.4.0
+
+ + protobuf==5.29.5
+
+ + pyarrow==[2025-10-30 11:15:19.664468] 22.0.0
+
+ + pyasn1==0.6.1
+
+ + pyasn1-modules==0.4.2
+
+ + pydeck==0.9.1
+
+ + pygments==2.19.2[2025-10-30 11:15:19.664657] 
+
+ + python-dateutil==2.9.0.post0
+
+ + python-dotenv==1.2.1
+
+ + pytz==2025.2
+
+ + referencing==0.37.0[2025-10-30 11:15:19.664833] 
+
+ + requests==2.32.5
+
+ + rich==13.9.4
+
+ + rpds-py==0.28.0
+
+ + rsa==4.9.1
+
+ + six==1.17.0
+
+ + smmap==[2025-10-30 11:15:19.665048] 5.0.2
+
+ + sniffio==1.3.1
+
+ + streamlit==1.37.1
+
+ + streamlit-oauth==0.1.7
+
+ + tenacity==[2025-10-30 11:15:19.665399] 8.5.0
+
+ + toml==0.10.2
+
+ + tornado==6.5.2
+
+ + typing-extensions==4.15.0
+
+ + tzdata==2025.2[2025-10-30 11:15:19.665621] 
+
+ + urllib3==2.5.0
+
+ + watchdog==4.0.2
+
+Checking if Streamlit is installed
+
+Found Streamlit version 1.37.1 in the environment
+
+Installing rich for an improved exception logging
+
+Using uv pip install.
+
+Using Python 3.12.12 environment at /home/adminuser/venv
+
+Audited 1 package in 2ms
+
+
+────────────────────────────────────────────────────────────────────────────────────────
+
+
+[11:15:21] 🐍 Python dependencies were installed from /mount/src/tebi2xml/requirements.txt using uv.
+
+Check if streamlit is installed
+
+Streamlit is already installed
+
+[11:15:22] 📦 Processed dependencies!
+
+
+
+
+[11:15:25] ❗️ The service has encountered an error while checking the health of the Streamlit app: Get "http://localhost:8501/healthz": dial tcp 127.0.0.1:8501: connect: connection refused
