@@ -61,7 +61,7 @@ def show_landing():
     st.markdown("""
     - **Imports Tebi exports** (CSV/XLSX files)  
     - **Maps accounts & VAT**, fixes rounding differences  
-    - **Builds Twinfield XML** (posted as **concept**) — Exact (KAS) coming soon
+    - **Builds Twinfield XML** (posted as **concept**) or **Exact CSV** (KAS journal)
     """)
 
     # Why login

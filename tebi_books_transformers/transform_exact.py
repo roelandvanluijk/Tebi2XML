@@ -1,6 +1,7 @@
 # tebi_books_transformers/transform_exact.py
 import pandas as pd
 from io import BytesIO
+from decimal import Decimal
 from .utils import to_float
 
 def _gl(code):
@@ -11,7 +12,18 @@ def _gl(code):
     except Exception:
         return s
 
-def build_exact_csv(df, admin_code, journal_code, differences_ledger, currency="EUR", cost_center_code=None, journal_type="KAS"):
+def _to_dec(v):
+    """Convert to Decimal for precise rounding calculations"""
+    try:
+        return Decimal(str(v))
+    except Exception:
+        return Decimal("0.00")
+
+def _q2(d):
+    """Quantize to 2 decimal places"""
+    return d.quantize(Decimal("0.01"))
+
+def build_exact_csv(df, admin_code, journal_code, differences_ledger, currency="EUR", cost_center_code=None, journal_type="KAS", round_tolerance=Decimal("0.05")):
     """
     Build Exact Online import CSV in Dutch format for KAS (cash) or MEMORIAAL (general journal).
     Based on official Exact Online templates for revenue import.
@@ -75,7 +87,7 @@ def build_exact_csv(df, admin_code, journal_code, differences_ledger, currency="
 
     out_rows = []
     
-    # Group by date to create document numbers
+    # Group by date to create document numbers and balance per day
     for date_val, group in df.groupby(df["Date"].dt.date):
         if pd.isna(date_val):
             continue
@@ -91,6 +103,10 @@ def build_exact_csv(df, admin_code, journal_code, differences_ledger, currency="
         if journal_type == "KAS":
             opening_balance = 0.0  # Typically 0, could be calculated if needed
 
+        # Track balance for this day's journal entry
+        day_total = Decimal("0.00")
+        day_rows = []
+
         for _, r in group.iterrows():
             gl = _gl(r.get("Account Mapped", ""))
             if not gl or gl.lower() == "nan":
@@ -99,6 +115,10 @@ def build_exact_csv(df, admin_code, journal_code, differences_ledger, currency="
             amount = r.get("Amount_num")
             if pd.isna(amount) or float(amount) == 0:
                 continue
+
+            # Convert to Decimal for precise calculations
+            amount_dec = _to_dec(amount)
+            day_total += amount_dec
 
             # Get VAT info
             vat_code = str(r.get("Tax Code Mapped", "")).strip() if pd.notna(r.get("Tax Code Mapped")) else ""
@@ -120,7 +140,7 @@ def build_exact_csv(df, admin_code, journal_code, differences_ledger, currency="
             
             if journal_type == "KAS":
                 row["Beginsaldo"] = f"{opening_balance:.2f}" if opening_balance != 0 else ""
-                row["Datum"] = date_obj.strftime("%d-%m-%Y")  # Excel date serial for Dutch format
+                row["Datum"] = date_obj.strftime("%d-%m-%Y")
             else:
                 row["Wisselkoers"] = ""  # Empty for base currency
                 row["Boekdatum"] = date_obj.strftime("%d-%m-%Y")
@@ -144,7 +164,52 @@ def build_exact_csv(df, admin_code, journal_code, differences_ledger, currency="
                 "Naam": ""   # Relation name (optional)
             })
             
-            out_rows.append(row)
+            day_rows.append(row)
+        
+        # Check if this day's entries balance, add rounding correction if needed
+        if abs(day_total) > 0 and abs(day_total) <= round_tolerance:
+            # Add balancing line to differences ledger
+            balance_row = {
+                "Dagboek: Code": str(journal_code),
+                "Boekjaar": str(fiscal_year),
+                "Periode": str(period),
+                "Boekstuknummer": doc_number,
+                "Valuta": currency,
+            }
+            
+            if journal_type == "KAS":
+                balance_row["Beginsaldo"] = ""
+                balance_row["Datum"] = date_obj.strftime("%d-%m-%Y")
+            else:
+                balance_row["Wisselkoers"] = ""
+                balance_row["Boekdatum"] = date_obj.strftime("%d-%m-%Y")
+            
+            # Add balancing amount (opposite sign to balance to zero)
+            balance_amount = -day_total
+            
+            balance_row.update({
+                "Grootboekrekening": _gl(differences_ledger),
+                "Omschrijving": "Rondingsverschillen TEBI",
+                "Onze ref.": doc_number,
+                "Bedrag": f"{float(balance_amount):.2f}",
+                "Aantal": "",
+                "BTW-code": "",
+                "BTW-percentage": "",
+                "BTW-bedrag": "",
+                "Opmerkingen": "Auto-balancing",
+                "Project": "",
+                "Kostenplaats: Code": str(cost_center_code) if cost_center_code else "",
+                "Kostenplaats: Omschrijving": "",
+                "Kostendrager: Code": "",
+                "Kostendrager: Omschrijving": "",
+                "Code": "",
+                "Naam": ""
+            })
+            
+            day_rows.append(balance_row)
+        
+        # Add all rows for this day to output
+        out_rows.extend(day_rows)
 
     # Create DataFrame with proper column order
     out_df = pd.DataFrame(out_rows, columns=dutch_columns)
