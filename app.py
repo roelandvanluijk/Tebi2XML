@@ -1,6 +1,7 @@
 import os
 import json
 import io
+import zipfile
 import streamlit as st
 import pandas as pd
 from datetime import datetime
@@ -212,7 +213,7 @@ def format_date_for_filename(d):
 
 def build_filename(admin_code, df, target="Twinfield"):
     if "Date" in df.columns:
-        dates = pd.to_datetime(df["Date"], errors="coerce").dropna()
+        dates = pd.to_datetime(df["Date"], errors="coerce", dayfirst=True).dropna()
         if not dates.empty:
             start = format_date_for_filename(dates.min())
             end = format_date_for_filename(dates.max())
@@ -220,9 +221,14 @@ def build_filename(admin_code, df, target="Twinfield"):
             start = end = "unknown"
     else:
         start = end = "unknown"
-    
+
     ext = ".xml" if target == "Twinfield" else ".csv"
     return f"Tebi import {admin_code} {start} - {end}{ext}"
+
+def build_monthly_filename(admin_code, year, month, target="Twinfield"):
+    """Build filename for a specific month."""
+    ext = ".xml" if target == "Twinfield" else ".csv"
+    return f"Tebi import {admin_code} {year:04d}-{month:02d}{ext}"
 
 st.title("Tebi → Bookkeeping — Step-by-step")
 st.caption("Select → Upload → Fill info → Run → Map missing GL → Rerun (Twinfield XML posts as concept).")
@@ -354,8 +360,8 @@ elif st.session_state.step == 4:
     else:
         # Generate file based on selected software
         if is_exact:
-            with st.spinner("Building Exact Online CSV (KAS journal)…"):
-                csv_bytes = build_exact_csv(
+            with st.spinner("Building Exact Online CSV files per month (KAS journal)…"):
+                monthly_csvs = build_exact_csv(
                     df,
                     admin_code=st.session_state.admin_code,
                     journal_code=st.session_state.journal_code,
@@ -364,12 +370,30 @@ elif st.session_state.step == 4:
                     cost_center_code=(st.session_state.kpl_code.strip() if st.session_state.use_kpl else None),
                     journal_type="KAS"
                 )
-            st.success("CSV built. Download below and import via Exact Online → Financieel → Import.")
-            file_name = build_filename(st.session_state.admin_code, df, target="Exact Online")
-            st.download_button("Download Exact CSV (KAS)", data=csv_bytes, file_name=file_name, mime="text/csv")
+            st.success(f"CSV files built for {len(monthly_csvs)} month(s). Download below and import via Exact Online → Financieel → Import.")
+
+            # If only one month, provide direct download
+            if len(monthly_csvs) == 1:
+                (year, month), csv_bytes = list(monthly_csvs.items())[0]
+                file_name = build_monthly_filename(st.session_state.admin_code, year, month, target="Exact Online")
+                st.download_button("Download Exact CSV (KAS)", data=csv_bytes, file_name=file_name, mime="text/csv")
+            else:
+                # Multiple months: create ZIP file
+                zip_buffer = io.BytesIO()
+                with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                    for (year, month), csv_bytes in sorted(monthly_csvs.items()):
+                        file_name = build_monthly_filename(st.session_state.admin_code, year, month, target="Exact Online")
+                        zip_file.writestr(file_name, csv_bytes)
+                zip_buffer.seek(0)
+                st.download_button(
+                    f"Download All Months (ZIP with {len(monthly_csvs)} CSV files)",
+                    data=zip_buffer.getvalue(),
+                    file_name=f"Tebi import {st.session_state.admin_code} monthly.zip",
+                    mime="application/zip"
+                )
         else:
-            with st.spinner("Building Twinfield XML (concept)…"):
-                root = build_twinfield_xml(
+            with st.spinner("Building Twinfield XML files per month (concept)…"):
+                monthly_xmls = build_twinfield_xml(
                     df,
                     st.session_state.admin_code,
                     st.session_state.journal_code,
@@ -378,10 +402,29 @@ elif st.session_state.step == 4:
                     destiny="concept",
                     cost_center_code=(st.session_state.kpl_code.strip() if st.session_state.use_kpl else None),
                 )
+            st.success(f"XML files built for {len(monthly_xmls)} month(s). Download below.")
+
+            # If only one month, provide direct download
+            if len(monthly_xmls) == 1:
+                (year, month), root = list(monthly_xmls.items())[0]
                 xml_bytes = xml_to_bytes(root)
-            st.success("XML built. Download below.")
-            file_name = build_filename(st.session_state.admin_code, df, target="Twinfield")
-            st.download_button("Download Twinfield XML", data=xml_bytes, file_name=file_name, mime="application/xml")
+                file_name = build_monthly_filename(st.session_state.admin_code, year, month, target="Twinfield")
+                st.download_button("Download Twinfield XML", data=xml_bytes, file_name=file_name, mime="application/xml")
+            else:
+                # Multiple months: create ZIP file
+                zip_buffer = io.BytesIO()
+                with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                    for (year, month), root in sorted(monthly_xmls.items()):
+                        xml_bytes = xml_to_bytes(root)
+                        file_name = build_monthly_filename(st.session_state.admin_code, year, month, target="Twinfield")
+                        zip_file.writestr(file_name, xml_bytes)
+                zip_buffer.seek(0)
+                st.download_button(
+                    f"Download All Months (ZIP with {len(monthly_xmls)} XML files)",
+                    data=zip_buffer.getvalue(),
+                    file_name=f"Tebi import {st.session_state.admin_code} monthly.zip",
+                    mime="application/zip"
+                )
     st.button("← Back", on_click=prev_step)
 
 # --- STEP 5 ---
@@ -425,8 +468,8 @@ elif st.session_state.step == 5:
             else:
                 # Generate file based on selected software
                 if is_exact:
-                    with st.spinner("Building Exact Online CSV (KAS journal)…"):
-                        csv_bytes = build_exact_csv(
+                    with st.spinner("Building Exact Online CSV files per month (KAS journal)…"):
+                        monthly_csvs = build_exact_csv(
                             df,
                             admin_code=st.session_state.admin_code,
                             journal_code=st.session_state.journal_code,
@@ -435,12 +478,30 @@ elif st.session_state.step == 5:
                             cost_center_code=(st.session_state.kpl_code.strip() if st.session_state.use_kpl else None),
                             journal_type="KAS"
                         )
-                    st.success("CSV built. Download below and import via Exact Online → Financieel → Import.")
-                    file_name = build_filename(st.session_state.admin_code, df, target="Exact Online")
-                    st.download_button("Download Exact CSV (KAS)", data=csv_bytes, file_name=file_name, mime="text/csv")
+                    st.success(f"CSV files built for {len(monthly_csvs)} month(s). Download below and import via Exact Online → Financieel → Import.")
+
+                    # If only one month, provide direct download
+                    if len(monthly_csvs) == 1:
+                        (year, month), csv_bytes = list(monthly_csvs.items())[0]
+                        file_name = build_monthly_filename(st.session_state.admin_code, year, month, target="Exact Online")
+                        st.download_button("Download Exact CSV (KAS)", data=csv_bytes, file_name=file_name, mime="text/csv")
+                    else:
+                        # Multiple months: create ZIP file
+                        zip_buffer = io.BytesIO()
+                        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                            for (year, month), csv_bytes in sorted(monthly_csvs.items()):
+                                file_name = build_monthly_filename(st.session_state.admin_code, year, month, target="Exact Online")
+                                zip_file.writestr(file_name, csv_bytes)
+                        zip_buffer.seek(0)
+                        st.download_button(
+                            f"Download All Months (ZIP with {len(monthly_csvs)} CSV files)",
+                            data=zip_buffer.getvalue(),
+                            file_name=f"Tebi import {st.session_state.admin_code} monthly.zip",
+                            mime="application/zip"
+                        )
                 else:
-                    with st.spinner("Building Twinfield XML (concept)…"):
-                        root = build_twinfield_xml(
+                    with st.spinner("Building Twinfield XML files per month (concept)…"):
+                        monthly_xmls = build_twinfield_xml(
                             df,
                             st.session_state.admin_code,
                             st.session_state.journal_code,
@@ -449,10 +510,29 @@ elif st.session_state.step == 5:
                             destiny="concept",
                             cost_center_code=(st.session_state.kpl_code.strip() if st.session_state.use_kpl else None),
                         )
+                    st.success(f"XML files built for {len(monthly_xmls)} month(s). Download below.")
+
+                    # If only one month, provide direct download
+                    if len(monthly_xmls) == 1:
+                        (year, month), root = list(monthly_xmls.items())[0]
                         xml_bytes = xml_to_bytes(root)
-                    st.success("XML built. Download below.")
-                    file_name = build_filename(st.session_state.admin_code, df, target="Twinfield")
-                    st.download_button("Download Twinfield XML", data=xml_bytes, file_name=file_name, mime="application/xml")
+                        file_name = build_monthly_filename(st.session_state.admin_code, year, month, target="Twinfield")
+                        st.download_button("Download Twinfield XML", data=xml_bytes, file_name=file_name, mime="application/xml")
+                    else:
+                        # Multiple months: create ZIP file
+                        zip_buffer = io.BytesIO()
+                        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                            for (year, month), root in sorted(monthly_xmls.items()):
+                                xml_bytes = xml_to_bytes(root)
+                                file_name = build_monthly_filename(st.session_state.admin_code, year, month, target="Twinfield")
+                                zip_file.writestr(file_name, xml_bytes)
+                        zip_buffer.seek(0)
+                        st.download_button(
+                            f"Download All Months (ZIP with {len(monthly_xmls)} XML files)",
+                            data=zip_buffer.getvalue(),
+                            file_name=f"Tebi import {st.session_state.admin_code} monthly.zip",
+                            mime="application/zip"
+                        )
     st.button("← Back", on_click=prev_step)
 
 # --- Footer ---

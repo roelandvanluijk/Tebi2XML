@@ -34,7 +34,7 @@ def _normalize_tebi_csv(df):
         if col in df.columns:
             df[col + "_num"] = df[col].apply(to_float)
     if "Date" in df.columns:
-        df["Date"] = pd.to_datetime(df["Date"], errors="coerce").dt.date
+        df["Date"] = pd.to_datetime(df["Date"], errors="coerce", dayfirst=True).dt.date
     missing = [c for c in REQUIRED_TEBI_COLS if c not in df.columns]
     return df, missing
 
@@ -51,7 +51,7 @@ def _normalize_xls_macro(df):
         df["Tax Amount"] = None
     df["TaxAmount_num"] = df.apply(lambda r: (r["Amount_num"] * (float(r["TaxPerc_num"]) / 100.0)) if pd.notna(r.get("TaxPerc_num")) and pd.notna(r.get("Amount_num")) else None, axis=1)
     if "Date" in df.columns:
-        df["Date"] = pd.to_datetime(df["Date"], errors="coerce").dt.date
+        df["Date"] = pd.to_datetime(df["Date"], errors="coerce", dayfirst=True).dt.date
     return df, []
 
 def load_file(uploaded_file):
