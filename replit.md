@@ -18,6 +18,7 @@ A Streamlit web application that transforms Tebi exports into Twinfield XML or E
 ## Recent Changes
 ### November 17, 2025
 - **Fixed critical crash bug**: Fixed session state circular reference in Step 3 form fields that caused app to crash and require re-login when filling in Cost Center or other fields
+- **Fixed date format in XML output**: Corrected Twinfield XML date formatting to properly handle European dates (DD/MM/YYYY) by using date object's strftime directly instead of re-parsing with pd.to_datetime
 
 ### October 30, 2025
 - **Added Exact Online support**: Users can now export to Exact Online KAS journal format (Dutch CSV)

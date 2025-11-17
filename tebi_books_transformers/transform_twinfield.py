@@ -58,7 +58,7 @@ def build_twinfield_xml(
         header = SubElement(t, "header")
         SubElement(header, "office").text   = str(admin_code)
         SubElement(header, "code").text     = str(journal_code)
-        SubElement(header, "date").text     = pd.to_datetime(day).strftime("%Y%m%d")
+        SubElement(header, "date").text     = day.strftime("%Y%m%d")
         SubElement(header, "currency").text = currency
 
         lines = SubElement(t, "lines")
