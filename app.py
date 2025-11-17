@@ -300,15 +300,19 @@ elif st.session_state.step == 3:
     c1, c2, c3, c4 = st.columns(4)
     with c1:
         label = "Exact Admin code" if is_exact else "Twinfield Admin code"
-        st.session_state.admin_code = st.text_input(label, value=st.session_state.admin_code)
+        admin_input = st.text_input(label, value=st.session_state.admin_code)
+        st.session_state.admin_code = admin_input
     with c2:
         label = "Dagboek code (KAS)" if is_exact else "Twinfield Journal code"
         help_text = "Journal code for KAS (cash journal), e.g., '10'" if is_exact else None
-        st.session_state.journal_code = st.text_input(label, value=st.session_state.journal_code, help=help_text)
+        journal_input = st.text_input(label, value=st.session_state.journal_code, help=help_text)
+        st.session_state.journal_code = journal_input
     with c3:
-        st.session_state.diff_ledger = st.text_input("Differences ledger (GL)", value=st.session_state.diff_ledger)
+        diff_input = st.text_input("Differences ledger (GL)", value=st.session_state.diff_ledger)
+        st.session_state.diff_ledger = diff_input
     with c4:
-        st.session_state.currency = st.text_input("Currency", value=st.session_state.currency)
+        currency_input = st.text_input("Currency", value=st.session_state.currency)
+        st.session_state.currency = currency_input
 
     # Software-specific confirmation
     if is_exact:
@@ -322,8 +326,9 @@ elif st.session_state.step == 3:
     st.session_state.use_kpl = (use_kpl_choice == "Yes")
     if st.session_state.use_kpl:
         help_text = "Kostenplaats code for Exact Online" if is_exact else "This will be written to <dim2> in Twinfield."
-        st.session_state.kpl_code = st.text_input("Cost center (KPL) code", value=st.session_state.kpl_code, help=help_text)
-        if not st.session_state.kpl_code.strip():
+        kpl_input = st.text_input("Cost center (KPL) code", value=st.session_state.kpl_code, help=help_text)
+        st.session_state.kpl_code = kpl_input
+        if not kpl_input.strip():
             st.info("Please enter the KPL code. Leave blank only if this admin should not use a cost center.")
 
     st.button("Next →", on_click=next_step, type="primary")

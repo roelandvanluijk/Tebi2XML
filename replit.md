@@ -15,7 +15,11 @@ A Streamlit web application that transforms Tebi exports into Twinfield XML or E
 - Google OAuth authentication setup (requires configuration)
 - Deployment configured for autoscale
 
-## Recent Changes (October 30, 2025)
+## Recent Changes
+### November 17, 2025
+- **Fixed critical crash bug**: Fixed session state circular reference in Step 3 form fields that caused app to crash and require re-login when filling in Cost Center or other fields
+
+### October 30, 2025
 - **Added Exact Online support**: Users can now export to Exact Online KAS journal format (Dutch CSV)
 - Merged Exact functionality into main app with software selector (Twinfield or Exact Online)
 - Implemented proper Dutch CSV format for Exact Online based on official templates
