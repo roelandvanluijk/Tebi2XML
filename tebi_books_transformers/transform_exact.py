@@ -43,7 +43,8 @@ def build_exact_csv(df, admin_code, journal_code, differences_ledger, currency="
     if "TaxAmount_num" not in df.columns and "Tax Amount" in df.columns:
         df["TaxAmount_num"] = df["Tax Amount"].apply(to_float)
 
-    df["Date"] = pd.to_datetime(df["Date"], errors="coerce", dayfirst=True)
+    # Parse dates - use 'mixed' format to handle both ISO and European dates correctly
+    df["Date"] = pd.to_datetime(df["Date"], format='mixed', errors="coerce")
 
     # Dutch column names matching Exact Online templates
     dutch_columns = [

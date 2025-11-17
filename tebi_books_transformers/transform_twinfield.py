@@ -41,7 +41,9 @@ def build_twinfield_xml(
         else:
             df["TaxAmount_num"] = None
 
-    df["Date"] = pd.to_datetime(df["Date"], errors="coerce", dayfirst=True).dt.date
+    # Parse dates - try ISO format first, then European format
+    # Don't use dayfirst=True for ISO dates as it causes incorrect parsing!
+    df["Date"] = pd.to_datetime(df["Date"], format='mixed', errors="coerce").dt.date
     txs = Element("transactions")
 
     # Group per day
