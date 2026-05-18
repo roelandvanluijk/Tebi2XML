@@ -288,9 +288,12 @@ elif st.session_state.step == 5:
     map_df = pd.DataFrame(map_rows)
 
     st.markdown("#### Add GL (dim1) for each missing source account")
-    edited = st.data_editor(map_df, num_rows="dynamic", use_container_width=True, key="map_editor")
+    st.caption("Fill in all GL codes, then click the button below. Pressing Enter only confirms a cell — it does not build the file.")
+    with st.form("map_form"):
+        edited = st.data_editor(map_df, num_rows="dynamic", use_container_width=True, key="map_editor")
+        submitted = st.form_submit_button(button_label, type="primary")
 
-    if st.button(button_label):
+    if submitted:
         for _, r in edited.iterrows():
             acc = str(r.get("Account", "")).strip()
             gl = str(r.get("Mapped GL", "")).strip()
