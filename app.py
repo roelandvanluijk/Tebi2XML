@@ -68,6 +68,11 @@ defaults = {
     "currency": "EUR",
     "use_kpl": False,
     "kpl_code": "",
+    "generated_bytes": None,
+    "generated_filename": "",
+    "generated_mime": "",
+    "generated_label": "",
+    "generated_success": "",
 }
 for k, v in defaults.items():
     if k not in st.session_state:
@@ -303,11 +308,12 @@ elif st.session_state.step == 5:
 
         if st.session_state.missing_accounts:
             st.warning(f"Still missing {len(st.session_state.missing_accounts)} mappings. Add the rest and click the button again.")
+            st.session_state.generated_bytes = None
         else:
             if st.session_state.use_kpl and (not st.session_state.kpl_code.strip()):
                 st.error("This admin uses a Cost center, but no KPL code was provided in Step 3.")
             else:
-                # Generate file based on selected software
+                # Generate file based on selected software and persist in session_state
                 if is_exact:
                     with st.spinner("Building Exact Online CSV (KAS journal)…"):
                         csv_bytes = build_exact_csv(
@@ -319,9 +325,11 @@ elif st.session_state.step == 5:
                             cost_center_code=(st.session_state.kpl_code.strip() if st.session_state.use_kpl else None),
                             journal_type="KAS"
                         )
-                    st.success("CSV built. Download below and import via Exact Online → Financieel → Import.")
-                    file_name = build_filename(st.session_state.admin_code, df, target="Exact Online")
-                    st.download_button("Download Exact CSV (KAS)", data=csv_bytes, file_name=file_name, mime="text/csv")
+                    st.session_state.generated_bytes = csv_bytes
+                    st.session_state.generated_filename = build_filename(st.session_state.admin_code, df, target="Exact Online")
+                    st.session_state.generated_mime = "text/csv"
+                    st.session_state.generated_label = "Download Exact CSV (KAS)"
+                    st.session_state.generated_success = "CSV built. Download below and import via Exact Online → Financieel → Import."
                 else:
                     with st.spinner("Building Twinfield XML (concept)…"):
                         root = build_twinfield_xml(
@@ -334,9 +342,22 @@ elif st.session_state.step == 5:
                             cost_center_code=(st.session_state.kpl_code.strip() if st.session_state.use_kpl else None),
                         )
                         xml_bytes = xml_to_bytes(root)
-                    st.success("XML built. Download below.")
-                    file_name = build_filename(st.session_state.admin_code, df, target="Twinfield")
-                    st.download_button("Download Twinfield XML", data=xml_bytes, file_name=file_name, mime="application/xml")
+                    st.session_state.generated_bytes = xml_bytes
+                    st.session_state.generated_filename = build_filename(st.session_state.admin_code, df, target="Twinfield")
+                    st.session_state.generated_mime = "application/xml"
+                    st.session_state.generated_label = "Download Twinfield XML"
+                    st.session_state.generated_success = "XML built. Download below."
+
+    # Show download button outside if st.button() so it persists across rerenders
+    if st.session_state.get("generated_bytes") is not None:
+        st.success(st.session_state.generated_success)
+        st.download_button(
+            st.session_state.generated_label,
+            data=st.session_state.generated_bytes,
+            file_name=st.session_state.generated_filename,
+            mime=st.session_state.generated_mime,
+        )
+
     st.button("← Back", on_click=prev_step)
 
 # --- Footer ---
