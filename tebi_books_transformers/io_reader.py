@@ -6,12 +6,23 @@ REQUIRED_TEBI_COLS = [
     "Tax Amount", "Tax Code Mapped", "Tax Percentage"
 ]
 
+# Dutch column-header aliases. Covers both the legacy .xls export
+# (Datum, Omschrijving, Grtboekrek., Bedrag, Btwcode) and the current .csv
+# export, which uses a different Dutch header set (Account gekoppeld,
+# Belastingbedrag, etc.) for the same fields. Applied to both file types below
+# so a Dutch-locale CSV export doesn't fall back to an unmapped "Account
+# Mapped"/"Tax Amount"/"Tax Percentage", silently dropping ledger and VAT data.
 XLS_MAP = {
     "Datum": "Date",
     "Omschrijving": "Account",
     "Grtboekrek.": "Account Mapped",
+    "Account gekoppeld": "Account Mapped",
     "Bedrag": "Amount",
     "Btwcode": "Tax Code Mapped",
+    "Belastingbedrag": "Tax Amount",
+    "Belastingcode": "Tax Code",
+    "Belastingcode gekoppeld": "Tax Code Mapped",
+    "Belastingpercentage": "Tax Percentage",
 }
 DC_COL = "DebitCredit"  # debit/credit from macro
 
@@ -30,6 +41,7 @@ def _read_csv_autodelim_str(text):
 
 def _normalize_tebi_csv(df):
     df = df.rename(columns=lambda c: str(c).strip())
+    df = df.rename(columns={k: v for k, v in XLS_MAP.items() if k in df.columns})
     for col in ["Amount", "Tax Amount", "Tax Percentage"]:
         if col in df.columns:
             df[col + "_num"] = df[col].apply(to_float)
